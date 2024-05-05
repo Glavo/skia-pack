@@ -132,11 +132,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  linux-arm64:
+  linux-cross:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         build_type: [ Debug, Release ]
+        arch: [arm64, riscv64]
+        include:
+          - arch: arm64
+            cross_arch: aarch64
+            prepare_script: prepare_linux_arm.sh
+          - arch: riscv64
+            cross_arch: riscv64
+            prepare_script: prepare_linux_riscv.sh
       fail-fast: false
     steps:
       - uses: actions/checkout@v2
@@ -145,7 +153,7 @@ jobs:
         id: assemble
         if: ${{ github.event.inputs.skip_release != 'true' && github.ref == 'refs/heads/main' }}
         with:
-            arch: aarch64
+            arch: ${{ matrix.cross_arch }}
             distro: ubuntu20.04
             githubToken: ${{ secrets.GITHUB_TOKEN }}
             # Mount checkout directory as /checkout in the container
@@ -154,7 +162,7 @@ jobs:
             env: |
               build_type: ${{ matrix.build_type }}
               build_version: ${{ env.version }}
-              artifact_name: Skia-${{ env.version }}-linux-${{ matrix.build_type }}-arm64.zip
+              artifact_name: Skia-${{ env.version }}-linux-${{ matrix.build_type }}-$.zip
               GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             # The shell to run commands with in the container
             shell: /bin/bash
@@ -163,7 +171,7 @@ jobs:
               apt-get install -q -y bash
             run: |
               cd /checkout
-              /bin/bash script/prepare_linux_arm.sh
+              /bin/bash script/${{ matrix.prepare_script }}
               python3 script/check_release.py --version ${build_version} --build-type ${build_type}
               python3 script/checkout.py --version ${build_version}
               python3 script/build.py --build-type ${build_type} --build-type ${build_type}
@@ -174,7 +182,7 @@ jobs:
         id: test-build
         if: ${{ github.event.inputs.skip_release == 'true' || github.ref != 'refs/heads/main' }}
         with:
-            arch: aarch64
+            arch: ${{ matrix.cross_arch }}
             distro: ubuntu20.04
             githubToken: ${{ secrets.GITHUB_TOKEN }}
             # Mount checkout directory as /checkout in the container
@@ -183,7 +191,7 @@ jobs:
             env: |
               build_type: ${{ matrix.build_type }}
               build_version: ${{ env.version }}
-              artifact_name: Skia-${{ env.version }}-linux-${{ matrix.build_type }}-arm64.zip
+              artifact_name: Skia-${{ env.version }}-linux-${{ matrix.build_type }}-${{ matrix.arch }}.zip
             # The shell to run commands with in the container
             shell: /bin/bash
             install: |
@@ -191,7 +199,7 @@ jobs:
               apt-get install -q -y bash
             run: |
               cd /checkout
-              /bin/bash script/prepare_linux_arm.sh
+              /bin/bash script/${{ matrix.prepare_script }}
               python3 script/checkout.py --version ${build_version}
               python3 script/build.py --build-type ${build_type} --build-type ${build_type}
               echo "Verified build"
@@ -202,7 +210,7 @@ jobs:
             path: '*.zip'
         env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: python3 script/release.py --version ${{ env.version }} --build-type ${{ matrix.build_type }} --target linux --machine arm64
+      - run: python3 script/release.py --version ${{ env.version }} --build-type ${{ matrix.build_type }} --target linux --machine ${{ matrix.arch }}
         if: ${{ github.event.inputs.skip_release != 'true' && github.ref == 'refs/heads/main' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
