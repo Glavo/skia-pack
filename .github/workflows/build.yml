@@ -137,13 +137,13 @@ jobs:
     strategy:
       matrix:
         build_type: [ Debug, Release ]
-        arch: [arm64, riscv64]
+        machine: [arm64, riscv64]
         include:
-          - arch: arm64
-            cross_arch: aarch64
+          - machine: arm64
+            arch: aarch64
             prepare_script: prepare_linux_arm.sh
-          - arch: riscv64
-            cross_arch: riscv64
+          - machine: riscv64
+            arch: riscv64
             prepare_script: prepare_linux_riscv.sh
       fail-fast: false
     steps:
@@ -153,16 +153,13 @@ jobs:
         id: assemble
         if: ${{ github.event.inputs.skip_release != 'true' && github.ref == 'refs/heads/main' }}
         with:
-            arch: ${{ matrix.cross_arch }}
+            arch: ${{ matrix.arch }}
             distro: ubuntu20.04
             githubToken: ${{ secrets.GITHUB_TOKEN }}
             # Mount checkout directory as /checkout in the container
             dockerRunArgs: |
               --volume "${GITHUB_WORKSPACE}:/checkout"
             env: |
-              build_type: ${{ matrix.build_type }}
-              build_version: ${{ env.version }}
-              artifact_name: Skia-${{ env.version }}-linux-${{ matrix.build_type }}-$.zip
               GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             # The shell to run commands with in the container
             shell: /bin/bash
@@ -172,26 +169,22 @@ jobs:
             run: |
               cd /checkout
               /bin/bash script/${{ matrix.prepare_script }}
-              python3 script/check_release.py --version ${build_version} --build-type ${build_type}
-              python3 script/checkout.py --version ${build_version}
-              python3 script/build.py --build-type ${build_type} --build-type ${build_type}
-              python3 script/archive.py --version ${build_version} --build-type ${build_type}
-              echo "Produced artifact at ${PWD}/${artifact_name}"
+              python3 script/check_release.py --version ${{ env.version }} --target linux --build-type ${{ matrix.build_type }} --machine ${{ matrix.machine }}
+              python3 script/checkout.py --version ${{ env.version }}
+              python3 script/build.py --target linux --build-type ${{ matrix.build_type }} --machine ${{ matrix.machine }}
+              python3 script/archive.py --version ${{ env.version }} --target linux --build-type ${{ matrix.build_type }} --machine ${{ matrix.machine }}
+              echo "Produced artifact at ${PWD}/Skia-${{ env.version }}-linux-${{ matrix.build_type }}-${{ matrix.machine }}.zip"
       - uses: uraimo/run-on-arch-action@v2.0.5
         name: Test Build
         id: test-build
         if: ${{ github.event.inputs.skip_release == 'true' || github.ref != 'refs/heads/main' }}
         with:
-            arch: ${{ matrix.cross_arch }}
+            arch: ${{ matrix.arch }}
             distro: ubuntu20.04
             githubToken: ${{ secrets.GITHUB_TOKEN }}
             # Mount checkout directory as /checkout in the container
             dockerRunArgs: |
               --volume "${GITHUB_WORKSPACE}:/checkout"
-            env: |
-              build_type: ${{ matrix.build_type }}
-              build_version: ${{ env.version }}
-              artifact_name: Skia-${{ env.version }}-linux-${{ matrix.build_type }}-${{ matrix.arch }}.zip
             # The shell to run commands with in the container
             shell: /bin/bash
             install: |
@@ -200,17 +193,17 @@ jobs:
             run: |
               cd /checkout
               /bin/bash script/${{ matrix.prepare_script }}
-              python3 script/checkout.py --version ${build_version}
-              python3 script/build.py --build-type ${build_type} --build-type ${build_type}
+              python3 script/checkout.py --version ${{ env.version }}
+              python3 script/build.py --build-type ${{ matrix.build_type }}
               echo "Verified build"
       - uses: actions/upload-artifact@v2
         if: ${{ github.event.inputs.skip_release != 'true' && github.ref == 'refs/heads/main' }}
         with:
-            name: Skia-${{ env.version }}-linux-${{ matrix.build_type }}-arm64.zip
+            name: Skia-${{ env.version }}-linux-${{ matrix.build_type }}-${{ matrix.machine }}.zip
             path: '*.zip'
         env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: python3 script/release.py --version ${{ env.version }} --build-type ${{ matrix.build_type }} --target linux --machine ${{ matrix.arch }}
+      - run: python3 script/release.py --version ${{ env.version }} --build-type ${{ matrix.build_type }} --target linux --machine ${{ matrix.machine }}
         if: ${{ github.event.inputs.skip_release != 'true' && github.ref == 'refs/heads/main' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
